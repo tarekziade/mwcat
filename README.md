@@ -11,7 +11,9 @@ See https://en.wikipedia.org/wiki/Category:Main_topic_classifications
 If the produce model is able to classify any web page against those topics,
 it can be used in Firefox to group tabs per user intent.
 
-Proposed list of user intents:
+The theory is that a user intent can be inferred from the categories from each page.
+
+Proposed list of user intents / wikipedia topics matches :
 
 1. **Researching for Academic Purposes**:
 
