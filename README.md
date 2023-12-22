@@ -8,7 +8,7 @@ It's a much better taxonomy than the classical AG News or Reuters one.
 
 See https://en.wikipedia.org/wiki/Category:Main_topic_classifications
 
-If the produce model is able to classify any web page against those topics,
+If the produced model is able to classify any web page against those topics,
 it can be used in Firefox to group tabs per user intent.
 
 The theory is that a user intent can be inferred from the categories from each page.
