@@ -48,6 +48,8 @@ Run `make install` and then `make extract`
 
 ## Test dataset
 
+XXX WIP
+
 The test dataset (same size as the validation dataset) uses an LLM to classify text, making
 the assumption that the result should be optimal and that the small model should try to do as well.
 
