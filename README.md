@@ -94,17 +94,23 @@ Proposed list of user intents / wikipedia topics matches :
 20. **Career and Job Search**:
     - Business, Education, Career Development, Corporate Culture, Employment Trends
 
-## Training and Validation Dataset
+## Training Dataset
 
-The training (80% split) & validation (20% split) dataset is composed of wikipedia pages.
+The training (90% split) & test (10% split) dataset is composed of wikipedia pages summaries.
 
 Pages are selected directly under every root categories or their direct subcategories, ensuring a wide coverage of topics.
 A page that shares several root category is discarded. The tree of categories is visited until each root category has
-a corpus of 10k pages. The text of each page is cleaned and split in sentences and the 5 first sentences are kept.
+a corpus of 200 pages. The summary of the page is used, with a fallback of the 5 first sentences of the page (nltk-cleaned)
 
-The `wikiextract.py` script generates and uploads the dataset to https://huggingface.co/datasets/tarekziade/wikipedia-topics
+The `wikiextract.py` script generates and uploads the dataset to the Hugging Face Hub at `tarekziade/wikipedia-topics`
 
-This dataset can be used to train a text classification model.
+To use it:
+
+```
+from datasets import load_dataset
+
+dataset = load_dataset("tarekziade/wikipedia-topics")
+```
 
 ## Test dataset
 
