@@ -2,3 +2,4 @@ mwxml
 mwparserfromhell
 nltk
 mysql-connector-python
+tqdm

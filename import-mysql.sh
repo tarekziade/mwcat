@@ -27,7 +27,12 @@ else
 		-e MYSQL_USER=$DB_USER \
 		-e MYSQL_PASSWORD=$DB_PASS \
 		-p $DB_PORT:3306 \
-		mysql
+		mysql \
+		--innodb-buffer-pool-size=4G \
+		--innodb-log-buffer-size=256M \
+		--innodb-log-file-size=1G \
+		--innodb-write-io-threads=16 \
+		--innodb-flush-log-at-trx-commit=0
 
 	docker exec -i $CONTAINER_NAME /usr/bin/microdnf install -y epel-release
 	docker exec -i $CONTAINER_NAME /usr/bin/microdnf install -y pv
@@ -35,10 +40,11 @@ else
 	sleep 30
 
 	# Import the SQL files
-	echo "Importing SQL files..."
-	for file in $SQL_FILES_DIR/*.sql; do
-		docker exec -i $CONTAINER_NAME pv /$file | mysql -h 127.0.0.1 -u$DB_USER -p$DB_PASS $DB_NAME
-	done
+	#echo "Importing SQL files..."
+	#for file in $SQL_FILES_DIR/*.sql; do
+	#		docker exec -i $CONTAINER_NAME pv /$file | mysql -h 127.0.0.1 -u$DB_USER -p$DB_PASS $DB_NAME
+	#done
+	#docker exec -i $CONTAINER_NAME pv /data/enwiki-latest-pagelinks.sql | mysql -h 127.0.0.0.1 -u$DB_USER -p$DB_PASS $DB_NAME
 
 	# Mark as imported
 	touch "$SQL_FILES_DIR/.imported"

@@ -96,7 +96,11 @@ Proposed list of user intents / wikipedia topics matches :
 
 ## Training and Validation Dataset
 
-The training (80% split) & validation (20% split) dataset is composed of all wikipedia articles.
+The training (80% split) & validation (20% split) dataset is composed of wikipedia pages.
+
+Pages are selected directly under every root categories or their direct subcategories, ensuring a wide coverage of topics.
+A page that shares several root category is discarded. The tree of categories is visited until each root category has
+a corpus of 10k pages. The text of each page is cleaned and split in sentences and the 5 first sentences are kept.
 
 The `training.py` script generates two CSV files: `train.csv` and `validation.csv`.
 
