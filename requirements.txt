@@ -3,3 +3,6 @@ mwparserfromhell
 nltk
 mysql-connector-python
 tqdm
+wikipedia-api
+datasets
+pandas
