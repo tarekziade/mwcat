@@ -102,42 +102,9 @@ Pages are selected directly under every root categories or their direct subcateg
 A page that shares several root category is discarded. The tree of categories is visited until each root category has
 a corpus of 10k pages. The text of each page is cleaned and split in sentences and the 5 first sentences are kept.
 
-The `training.py` script generates two CSV files: `train.csv` and `validation.csv`.
-
-```mermaid
-graph LR
-    Z[Wikipedia Dumps] --> A
-    Z[Wikipedia Dumps] --> F
-
-    A[articles.xml] -->|Processing| B(Extraction Process)
-    B -->|page_id| C[page_id]
-    B -->|title| D[title]
-    B -->|text| E[text]
-    F[categories.sql] -->|Import| G[MySQL DB]
-    G -->|categories| H[categories]
-
-    C --> I(Dataset)
-    D --> I(Dataset)
-    E --> I(Dataset)
-    H --> I(Dataset)
-```
-
-Fields:
-
-- page_id
-- title
-- categories: root category from each category found for the page
-- text: 5 first sentences of the page (cleaned)
+The `wikiextract.py` script generates and uploads the dataset to https://huggingface.co/datasets/tarekziade/wikipedia-topics
 
 This dataset can be used to train a text classification model.
-
-It uses Wikipedia dumps and runs a dockerized mysql server to query for the page categories hierarchy.
-
-Requirements: Python 3, a good internet connection and a lot of time.
-
-Run `make install` and then `make extract`
-
-**WARNING**: This dataset will download over 100GiB of data from Wikipedia (once).
 
 ## Test dataset
 
