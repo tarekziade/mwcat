@@ -6,3 +6,7 @@ tqdm
 wikipedia-api
 datasets
 pandas
+transformers
+torch
+sentencepiece
+accelerate
