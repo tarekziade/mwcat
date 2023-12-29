@@ -1,9 +1,9 @@
 import torch
-from transformers import T5ForConditionalGeneration, T5Tokenizer
-from nltk.tokenize import sent_tokenize
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
 from datasets import load_dataset
 from tqdm import tqdm
+
+from mwcat.utils import id_to_category
 
 
 def load_model():
@@ -20,53 +20,6 @@ def dataset_iterator(dataset_name, split="train"):
     return iter(dataset)
 
 
-categories = [
-    "Academic disciplines",
-    "Business",
-    "Communication",
-    "Concepts",
-    "Culture",
-    "Economy",
-    "Education",
-    "Energy",
-    "Engineering",
-    "Entertainment",
-    "Entities",
-    "Ethics",
-    "Food and drink",
-    "Geography",
-    "Government",
-    "Health",
-    "History",
-    "Human behavior",
-    "Humanities",
-    "Information",
-    "Internet",
-    "Knowledge",
-    "Language",
-    "Law",
-    "Life",
-    "Lists",
-    "Mass media",
-    "Mathematics",
-    "Military",
-    "Nature",
-    "People",
-    "Philosophy",
-    "Politics",
-    "Religion",
-    "Science",
-    "Society",
-    "Sports",
-    "Technology",
-    "Time",
-    "Universe",
-]
-categories = [cat.replace(" ", "_") for cat in categories]
-
-id_to_category = {i: cat for i, cat in enumerate(categories)}
-
-
 def classify(input_text, tokenizer, model):
     inputs = tokenizer(
         input_text,
@@ -81,14 +34,10 @@ def classify(input_text, tokenizer, model):
         logits = outputs.logits
 
     probabilities = torch.nn.functional.softmax(logits, dim=1)
-    predicted_class = torch.argmax(probabilities, dim=1).item()
-    category = id_to_category[predicted_class]
-    sorted_probabilities, sorted_indices = torch.sort(probabilities, descending=True)
+    # predicted_class = torch.argmax(probabilities, dim=1).item()
+    # category = id_to_category[predicted_class]
+    _, sorted_indices = torch.sort(probabilities, descending=True)
     sorted_categories = [id_to_category[int(index)] for index in sorted_indices[0]][:3]
-
-    # print("Class probabilities sorted from highest to lowest:")
-    # for category, probability in zip(sorted_categories, sorted_probabilities[0]):
-    #    print(f"{category}: {probability.item()}")
     return sorted_categories
 
 

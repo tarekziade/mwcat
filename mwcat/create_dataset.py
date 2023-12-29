@@ -14,55 +14,13 @@ import shelve
 
 import wikipediaapi
 from datasets import Dataset, DatasetDict
-import nltk
-from nltk.tokenize import sent_tokenize
 import pandas as pd
 from tqdm import tqdm
 
+from mwcat.utils import CATEGORIES, NUM_CATEGORIES, sentences
+
 
 _LIMIT_PER_CAT = 1000
-_ROOT_CATS = [
-    "Academic_disciplines",
-    "Business",
-    "Communication",
-    "Concepts",
-    "Culture",
-    "Economy",
-    "Education",
-    "Energy",
-    "Engineering",
-    "Entertainment",
-    "Entities",
-    "Ethics",
-    "Food_and_drink",
-    "Geography",
-    "Government",
-    "Health",
-    "History",
-    "Human_behavior",
-    "Humanities",
-    "Information",
-    "Internet",
-    "Knowledge",
-    "Language",
-    "Law",
-    "Life",
-    "Lists",
-    "Mass_media",
-    "Mathematics",
-    "Military",
-    "Nature",
-    "People",
-    "Philosophy",
-    "Politics",
-    "Religion",
-    "Science",
-    "Society",
-    "Sports",
-    "Technology",
-    "Time",
-    "Universe",
-]
 
 
 class WikiExtractor:
@@ -124,8 +82,7 @@ class WikiExtractor:
             text = page.summary
         else:
             text = page.text
-        sentences = sent_tokenize(text)[:5]
-        return " ".join(sentences)
+        return sentences(text)
 
     def process_page(self, category_name, page):
         page_id = str(page.pageid)
@@ -148,11 +105,11 @@ class WikiExtractor:
 
     def __call__(self):
         with tqdm(
-            total=len(_ROOT_CATS) * _LIMIT_PER_CAT, desc="Processing Categories"
+            total=NUM_CATEGORIES * _LIMIT_PER_CAT, desc="Processing Categories"
         ) as pbar:
             self.pbar = pbar
             with ThreadPoolExecutor(max_workers=15) as executor:
-                for category in _ROOT_CATS:
+                for category in CATEGORIES:
                     category = f"Category:{category}"
                     executor.submit(self.process_category, category, category)
                 executor.shutdown(wait=True)
@@ -164,7 +121,6 @@ class WikiExtractor:
 
 
 def main():
-    nltk.download("punkt")
     extractor = WikiExtractor()
 
     # TODO: use the iterator to stream to Dataset avoid loading all the pages in memory
