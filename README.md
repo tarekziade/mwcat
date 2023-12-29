@@ -96,13 +96,12 @@ Proposed list of user intents / wikipedia topics matches :
 
 ## Training Dataset
 
-The training (90% split) & test (10% split) dataset is composed of wikipedia pages summaries.
+The training (90% split) & test (10% split) dataset is composed of wikipedia pages titles and summaries.
 
 Pages are selected directly under every root categories or their direct subcategories, ensuring a wide coverage of topics.
-A page that shares several root category is discarded. The tree of categories is visited until each root category has
-a corpus of 200 pages. The summary of the page is used, with a fallback of the 5 first sentences of the page (nltk-cleaned)
+The tree of categories is visited until each root category has a corpus of at most 1000 pages.
 
-The `wikiextract.py` script generates and uploads the dataset to the Hugging Face Hub at `tarekziade/wikipedia-topics`
+To generate the dataset, run `mwcat-create-dataset`. The script generates and uploads the dataset to the Hugging Face Hub at `tarekziade/wikipedia-topics`
 
 To use it:
 
@@ -112,15 +111,11 @@ from datasets import load_dataset
 dataset = load_dataset("tarekziade/wikipedia-topics")
 ```
 
-## Test dataset
+## Training
 
-XXX WIP
+Training is done by fine tuning DistilBERT. To train, run `mwcat-train`. The script trains and uploads the model to
+the Hugging Face Hub at `tarekziade/wikipedia-topics-distilbert`
 
-The test dataset (same size as the validation dataset) uses an LLM to classify text, making
-the assumption that the result should be optimal and that the small model should try to do as well.
+## Evaluation & Validation
 
-The test data is built with Common Crawl
-
-XXX example https://skeptric.com/text-meta-data-commoncrawl
-
-To avoid costs, the LLM is https://wandb.ai/byyoung3/ml-news/reports/How-to-Run-Mistral-7B-on-an-M1-Mac-With-Ollama--Vmlldzo2MTg4MjA0
+XXX
