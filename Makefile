@@ -33,6 +33,6 @@ data/enwiki-latest-pagelinks.sql:
 
 .PHONY: extract
 extract: data/enwiki-latest-pages-articles.xml data/enwiki-latest-categorylinks.sql data/enwiki-latest-page.sql data/enwiki-latest-pagelinks.sql
-	bin/python extract.py data/enwiki-latest-pages-articles.xml
+	bin/python dump/extract.py data/enwiki-latest-pages-articles.xml
 
 
