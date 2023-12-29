@@ -20,7 +20,7 @@ import pandas as pd
 from tqdm import tqdm
 
 
-_LIMIT_PER_CAT = 200  # 1000
+_LIMIT_PER_CAT = 1000
 _ROOT_CATS = [
     "Academic_disciplines",
     "Business",
@@ -48,7 +48,7 @@ _ROOT_CATS = [
     "Law",
     "Life",
     "Lists",
-    "Mass media",
+    "Mass_media",
     "Mathematics",
     "Military",
     "Nature",
