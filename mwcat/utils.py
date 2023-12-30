@@ -76,6 +76,7 @@ def tokenize_and_format(tokenizer, examples):
     for cats in examples["categories"]:
         vec = [0] * NUM_CATEGORIES
         for cat in cats:
+            cat = cat.replace(" ", "_")
             vec[category_to_id[cat]] = 1
         labels.append(vec)
 

@@ -17,7 +17,10 @@ def load_model():
 
 def dataset_iterator(dataset_name, split="train"):
     dataset = load_dataset(dataset_name, split=split)
-    return iter(dataset)
+    import pdb
+
+    pdb.set_trace()
+    return len(dataset), iter(dataset)
 
 
 def classify(input_text, tokenizer, model):
@@ -48,8 +51,10 @@ def main():
     goods = 0
     bads = 0
     total = 0
-    with tqdm(total=763, desc="Testing pages") as pbar:
-        for row in dataset_iterator("tarekziade/wikipedia-topics", split="test"):
+    dataset_len, iter = dataset_iterator("tarekziade/wikipedia-topics", split="test")
+
+    with tqdm(total=dataset_len, desc="Testing pages") as pbar:
+        for row in iter:
             total += 1
             original_categories = [cat.replace(" ", "_") for cat in row["categories"]]
             input_text = f"cat: {row['title']}::{row['summary']}".lower()
