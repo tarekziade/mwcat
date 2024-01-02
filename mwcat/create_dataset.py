@@ -148,16 +148,18 @@ class WikiExtractor:
                 existing_categories.add(category_name)
                 categories = existing_categories
 
-                update_query = "UPDATE pages SET categories = ? WHERE id = ?"
-                conn.execute(update_query, (",".join(existing_categories), page_id))
+                update_query = "UPDATE pages SET categories = ?, text = ? WHERE id = ?"
+                conn.execute(
+                    update_query, (",".join(existing_categories), text, page_id)
+                )
             else:
                 # Insert new page
                 title = page.title
                 text = page.text
                 summary = self.extract_summary(page)
-                insert_query = "INSERT INTO pages (id, title, summary, categories) VALUES (?, ?, ?, ?)"
+                insert_query = "INSERT INTO pages (id, title, text, summary, categories) VALUES (?, ?, ?, ?, ?)"
                 conn.execute(
-                    insert_query, (page_id, page.title, summary, category_name)
+                    insert_query, (page_id, title, text, summary, category_name)
                 )
                 categories = [category_name]
 
@@ -184,9 +186,6 @@ class WikiExtractor:
 
             self.task_queue.join()  # Wait for all tasks to be completed
             self.stop_workers()
-            # for category in CATEGORIES:
-            #    category = f"Category:{category}"
-            #    self.process_category(category, category)
 
         with tqdm(
             total=NUM_CATEGORIES * _LIMIT_PER_CAT, desc="Creating dataset"
