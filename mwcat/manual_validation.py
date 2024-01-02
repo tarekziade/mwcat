@@ -1,9 +1,39 @@
 import torch
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
+from transformers import T5Tokenizer, T5ForConditionalGeneration
 from datasets import load_dataset
 from tqdm import tqdm
+import time
 
 from mwcat.utils import id_to_category
+
+
+def summarize_text(text_to_summarize):
+    tokenizer = T5Tokenizer.from_pretrained("t5-small")
+    model = T5ForConditionalGeneration.from_pretrained("./fine_tuned_t5")
+
+    # Prepare the input text
+    input_ids = tokenizer.encode(
+        "summarize: " + text_to_summarize,
+        return_tensors="pt",
+        max_length=512,
+        truncation=True,
+    )
+
+    # Generate the summary
+    summary_ids = model.generate(
+        input_ids,
+        max_length=150,
+        min_length=40,
+        length_penalty=2.0,
+        num_beams=4,
+        early_stopping=True,
+    )
+
+    start = time.time()
+    summary = tokenizer.decode(summary_ids[0], skip_special_tokens=True)
+    print(f"Took {time.time() - start:.2f} seconds")
+    return summary
 
 
 def load_model():
@@ -78,4 +108,8 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    text = open("sandman.txt").read().strip()
+    summary = summarize_text(text.strip())
+    print("Summary:", summary)
+
+    # main()
