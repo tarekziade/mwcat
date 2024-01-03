@@ -36,7 +36,7 @@ class WikipediaClassifier:
     default_model_id = "tarekziade/wikipedia-topics-tinybert"
     default_pre_trained_model = "huawei-noah/TinyBERT_General_4L_312D"
 
-    def __init__(self, save_path, hub_name, model_name, dataset_name):
+    def __init__(self, save_path, hub_name, model_name, dataset_name, force_download):
         self.training_args = TrainingArguments(
             output_dir="./results",
             num_train_epochs=3,
@@ -55,6 +55,7 @@ class WikipediaClassifier:
         self.hub_name = hub_name
         self.model_name = model_name
         self.dataset_name = dataset_name
+        self.force_download = force_download
 
     def load_trainer(self, train_dataset, eval_dataset):
         return self.trainer_klass(
@@ -66,7 +67,11 @@ class WikipediaClassifier:
         )
 
     def _load(self, tokenizer, split, process=tokenize_and_format):
-        dataset = load_dataset(self.dataset_name, split=split)
+        if self.force_download:
+            mode = "force_redownload"
+        else:
+            mode = "reuse_dataset_if_exists"
+        dataset = load_dataset(self.dataset_name, split=split, download_mode=mode)
         return dataset.map(partial(process, tokenizer, True), batched=True)
 
     def load_data(self, dry=False):
@@ -139,6 +144,12 @@ def parse_arguments():
         default=False,
     )
     parser.add_argument(
+        "--force-download",
+        action="store_true",
+        help="Force model downloads",
+        default=False,
+    )
+    parser.add_argument(
         "--save-path", type=str, help="Path to save the model.", default=None
     )
     parser.add_argument("--model-id", type=str, help="Name of the model.", default=None)
@@ -175,7 +186,9 @@ def main():
         args.pre_trained_model or trainer_klass.default_pre_trained_model
     )
 
-    trainer = trainer_klass(save_path, model_id, pre_trained_model, args.dataset_id)
+    trainer = trainer_klass(
+        save_path, model_id, pre_trained_model, args.dataset_id, args.force_download
+    )
     trainer.run(dry=args.dry_run)
 
 
