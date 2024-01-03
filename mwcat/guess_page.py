@@ -10,59 +10,89 @@ from transformers import DistilBertTokenizer, DistilBertForSequenceClassificatio
 from mwcat.utils import id_to_category
 
 
-def get_most_probable_intent(categories):
-    category_to_intent = {
-        "Academic_disciplines": "Professional or Educational Development",
-        "Business": "Professional or Educational Development",
-        "Communication": "Social Interaction and Networking",
-        "Concepts": "Information Seeking",
-        "Culture": "Entertainment and Leisure",
-        "Economy": "Information Seeking",
-        "Education": "Professional or Educational Development",
-        "Energy": "Information Seeking",
-        "Engineering": "Professional or Educational Development",
-        "Entertainment": "Entertainment and Leisure",
-        "Entities": "Information Seeking",
-        "Ethics": "Professional or Educational Development",
-        "Food_and_drink": "Entertainment and Leisure",
-        "Geography": "Information Seeking",
-        "Government": "Information Seeking",
-        "Health": "Professional or Educational Development",
-        "History": "Information Seeking",
-        "Human_behavior": "Social Interaction and Networking",
-        "Humanities": "Professional or Educational Development",
-        "Information": "Information Seeking",
-        "Internet": "Information Seeking",
-        "Knowledge": "Information Seeking",
-        "Language": "Professional or Educational Development",
-        "Law": "Information Seeking",
-        "Life": "Information Seeking",
-        "Lists": "Information Seeking",
-        "Mass_media": "Entertainment and Leisure",
-        "Mathematics": "Professional or Educational Development",
-        "Military": "Information Seeking",
-        "Nature": "Information Seeking",
-        "People": "Social Interaction and Networking",
-        "Philosophy": "Professional or Educational Development",
-        "Politics": "Information Seeking",
-        "Religion": "Social Interaction and Networking",
-        "Science": "Professional or Educational Development",
-        "Society": "Social Interaction and Networking",
-        "Sports": "Entertainment and Leisure",
-        "Technology": "Professional or Educational Development",
-        "Time": "Information Seeking",
-        "Universe": "Information Seeking",
+category_to_intents_map = {
+    "Information": [
+        "Academic_disciplines",
+        "Concepts",
+        "Information",
+        "Knowledge",
+        "Science",
+        "Education",
+        "Geography",
+        "History",
+        "Mathematics",
+        "Engineering",
+        "Technology",
+        "Health",
+        "Law",
+        "Economy",
+        "Government",
+    ],
+    "Communication": [
+        "Communication",
+        "Language",
+        "Human_behavior",
+        "Business",
+        "Society",
+        "Politics",
+        "Ethics",
+        "Philosophy",
+    ],
+    "Social Networking": [
+        "Culture",
+        "Entertainment",
+        "Humanities",
+        "People",
+        "Society",
+        "Religion",
+        "Ethics",
+        "Philosophy",
+        "Life",
+        "Entities",
+    ],
+    "Entertainment": [
+        "Entertainment",
+        "Food_and_drink",
+        "Sports",
+        "Mass_media",
+        "Music",
+        "Culture",
+        "Arts",
+        "History",
+        "Human_behavior",
+    ],
+    "Online Media": [
+        "Internet",
+        "Technology",
+        "Mass_media",
+        "Engineering",
+        "Computers",
+        "Software",
+        "Information",
+        "Business",
+        "Economy",
+        "Education",
+    ],
+}
+
+
+def get_most_likely_intent(categories):
+    intents_count = {
+        "Information": 0,
+        "Communication": 0,
+        "Social Networking": 0,
+        "Entertainment": 0,
+        "Online Media": 0,
     }
 
-    # Count the occurrence of each intent
-    intent_count = {}
     for category in categories:
-        intent = category_to_intent.get(category, "Other")
-        intent_count[intent] = intent_count.get(intent, 0) + 1
+        for intent, mapped_categories in category_to_intents_map.items():
+            if category in mapped_categories:
+                intents_count[intent] += 1
 
-    # Determine the most probable intent
-    most_probable_intent = max(intent_count, key=intent_count.get)
-    return most_probable_intent
+    print(intents_count)
+    most_likely_intent = max(intents_count, key=intents_count.get)
+    return most_likely_intent
 
 
 def load_model():
@@ -114,7 +144,7 @@ start = time.time()
 sorted_categories = classify(input_text, tokenizer, model)
 print(f"Classified in {time.time() - start:.2f} seconds")
 
-most_probable_intent = get_most_probable_intent(sorted_categories)
+most_probable_intent = get_most_likely_intent(sorted_categories)
 
 print(f"The most likely categories are: {sorted_categories}")
 print(f"The most probable user intent is: {most_probable_intent}")

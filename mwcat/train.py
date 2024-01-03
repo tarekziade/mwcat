@@ -3,6 +3,7 @@
     - DistilBert on Wikipedia Topics
     - t5-small on Wikipedia summaries
 """
+import argparse
 from functools import partial
 
 from transformers import (
@@ -31,6 +32,9 @@ class CatTrainer(Trainer):
 
 class WikipediaClassifier:
     trainer_klass = CatTrainer
+    default_save_path = "./fine_tuned_distilbert"
+    default_model_id = "tarekziade/wikipedia-topics-tinybert"
+    default_pre_trained_model = "huawei-noah/TinyBERT_General_4L_312D"
 
     def __init__(self, save_path, hub_name, model_name, dataset_name):
         self.training_args = TrainingArguments(
@@ -63,7 +67,7 @@ class WikipediaClassifier:
 
     def _load(self, tokenizer, split, process=tokenize_and_format):
         dataset = load_dataset(self.dataset_name, split=split)
-        return dataset.map(partial(process, tokenizer), batched=True)
+        return dataset.map(partial(process, tokenizer, True), batched=True)
 
     def load_data(self, dry=False):
         tokenizer = DistilBertTokenizer.from_pretrained(self.model_name)
@@ -89,6 +93,9 @@ class WikipediaClassifier:
 
 class WikipediaSummarizer(WikipediaClassifier):
     trainer_klass = Trainer
+    default_save_path = "./fine_tuned_t5"
+    default_model_id = "tarekziade/wikipedia-summaries-t5-small"
+    default_pre_trained_model = "t5-small"
 
     def load_data(self, dry=False):
         tokenizer = T5Tokenizer.from_pretrained(self.model_name)
@@ -117,22 +124,59 @@ class WikipediaSummarizer(WikipediaClassifier):
         return tokenizer, model, train_dataset, test_dataset
 
 
-def main():
-    # trainer = WikipediaClassifier(
-    #    "./fine_tuned_distilbert",
-    #    "tarekziade/wikipedia-topics-distilbert",
-    #    "distilbert-base-uncased",
-    #    "tarekziade/wikipedia-topics",
-    # )
-    # trainer.run()
+_TASKS = {
+    "token-classification": WikipediaClassifier,
+    "summarization": WikipediaSummarizer,
+}
 
-    trainer = WikipediaSummarizer(
-        "./fine_tuned_t5",
-        "tarekziade/wikipedia-summaries-t5-small",
-        "t5-small",
-        "tarekziade/wikipedia-topics",
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(description="Model training.")
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run the script with 5%% corpus and no upload",
+        default=False,
     )
-    trainer.run(dry=True)
+    parser.add_argument(
+        "--save-path", type=str, help="Path to save the model.", default=None
+    )
+    parser.add_argument("--model-id", type=str, help="Name of the model.", default=None)
+    parser.add_argument(
+        "--pre-trained-model",
+        type=str,
+        help="Name of the pre-trained model for fine-tuning.",
+        default=None,
+    )
+    parser.add_argument(
+        "--dataset-id",
+        type=str,
+        help="Name of the Dataset",
+        default="tarekziade/wikipedia-topics",
+    )
+
+    parser.add_argument(
+        "--task",
+        type=str,
+        choices=["token-classification", "summarization"],
+        help="Choice of task for the model.",
+        default="token-classification",
+    )
+    args = parser.parse_args()
+    return args
+
+
+def main():
+    args = parse_arguments()
+    trainer_klass = _TASKS[args.task]
+    save_path = args.save_path or trainer_klass.default_save_path
+    model_id = args.model_id or trainer_klass.default_model_id
+    pre_trained_model = (
+        args.pre_trained_model or trainer_klass.default_pre_trained_model
+    )
+
+    trainer = trainer_klass(save_path, model_id, pre_trained_model, args.dataset_id)
+    trainer.run(dry=args.dry_run)
 
 
 if __name__ == "__main__":

@@ -59,9 +59,14 @@ def sentences(text, num_sentences=5):
     return " ".join(sentences)
 
 
-def tokenize_and_format(tokenizer, examples):
+def tokenize_and_format(tokenizer, use_summary, examples):
+    def _convert(title, summary):
+        if use_summary:
+            return f"cat: {title}::{summary}".lower()
+        return f"cat: {title}"
+
     inputs = [
-        f"cat: {title}::{summary}".lower()
+        _convert(title, summary)
         for (title, summary) in zip(examples["title"], examples["summary"])
     ]
 
