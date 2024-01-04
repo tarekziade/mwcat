@@ -97,7 +97,7 @@ def get_most_likely_intent(categories):
 
 def load_model():
     model = DistilBertForSequenceClassification.from_pretrained(
-        "./fine_tuned_distilbert"
+        "tarekziade/wikipedia-topics-tinybert"
     )
     tokenizer = DistilBertTokenizer.from_pretrained("distilbert-base-uncased")
     return tokenizer, model
