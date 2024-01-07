@@ -13,6 +13,8 @@ from transformers import (
     T5ForConditionalGeneration,
     Trainer,
     TrainingArguments,
+    T5Model,
+    AutoConfig,
 )
 from datasets import load_dataset
 from torch.nn import BCEWithLogitsLoss
@@ -36,7 +38,15 @@ class WikipediaClassifier:
     default_model_id = "tarekziade/wikipedia-topics-tinybert"
     default_pre_trained_model = "huawei-noah/TinyBERT_General_4L_312D"
 
-    def __init__(self, save_path, hub_name, model_name, dataset_name, force_download):
+    def __init__(
+        self,
+        save_path,
+        hub_name,
+        model_name,
+        dataset_name,
+        force_download,
+        from_scratch,
+    ):
         self.training_args = TrainingArguments(
             output_dir="./results",
             num_train_epochs=3,
@@ -56,6 +66,7 @@ class WikipediaClassifier:
         self.model_name = model_name
         self.dataset_name = dataset_name
         self.force_download = force_download
+        self.from_scratch = from_scratch
 
     def load_trainer(self, train_dataset, eval_dataset):
         return self.trainer_klass(
@@ -79,6 +90,10 @@ class WikipediaClassifier:
         model = DistilBertForSequenceClassification.from_pretrained(
             self.model_name, num_labels=NUM_CATEGORIES
         )
+        if self.from_scratch:
+            config = AutoConfig.from_pretrained(self.model_name)
+            model = DistilBertModel(config)
+
         train_dataset = self._load(tokenizer, "train[:1%]" if dry else "train")
         test_dataset = self._load(tokenizer, "test[:1%]" if dry else "test")
 
@@ -105,8 +120,11 @@ class WikipediaSummarizer(WikipediaClassifier):
     def load_data(self, dry=False):
         tokenizer = T5Tokenizer.from_pretrained(self.model_name)
         model = T5ForConditionalGeneration.from_pretrained(self.model_name)
+        if self.from_scratch:
+            config = AutoConfig.from_pretrained(self.model_name)
+            model = T5Model(config)
 
-        def preprocess_function(tokenizer, examples):
+        def preprocess_function(tokenizer, use_summary, examples):
             input_text = [f"summarize: {text}" for text in examples["text"]]
             target_text = examples["summary"]
             model_inputs = tokenizer(
@@ -144,6 +162,13 @@ def parse_arguments():
         default=False,
     )
     parser.add_argument(
+        "--from-scratch",
+        action="store_true",
+        help="Drops the weights from the pre-trained model to train from scratch",
+        default=False,
+    )
+
+    parser.add_argument(
         "--force-download",
         action="store_true",
         help="Force model downloads",
@@ -159,6 +184,7 @@ def parse_arguments():
         help="Name of the pre-trained model for fine-tuning.",
         default=None,
     )
+
     parser.add_argument(
         "--dataset-id",
         type=str,
@@ -187,7 +213,12 @@ def main():
     )
 
     trainer = trainer_klass(
-        save_path, model_id, pre_trained_model, args.dataset_id, args.force_download
+        save_path,
+        model_id,
+        pre_trained_model,
+        args.dataset_id,
+        args.force_download,
+        args.from_scratch,
     )
     trainer.run(dry=args.dry_run)
 

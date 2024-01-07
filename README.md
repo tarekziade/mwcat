@@ -43,6 +43,8 @@ dataset = load_dataset("tarekziade/wikipedia-topics")
 
 The classification model can be downloaded from https://huggingface.co/tarekziade/wikipedia-topics-distilbert
 
+There's a quantized ONNX version of the model that can be directly used in `Transformers.js`
+
 XXX
 
 ### Training
@@ -62,6 +64,8 @@ TBD
 XXX write an example using pytorch and transformers.js
 
 ## Summarization
+
+https://huggingface.co/tarekziade/wikipedia-summary-t5-small
 
 ### Training
 

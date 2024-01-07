@@ -18,5 +18,6 @@ setup(
       mwcat-train = mwcat.train:main
       mwcat-evaluate = mwcat.evaluate:main
       mwcat-validate = mwcat.manual_validation:main
+      mwcat-distil = mwca.distil:main
       """,
 )

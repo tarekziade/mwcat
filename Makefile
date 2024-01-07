@@ -35,4 +35,8 @@ data/enwiki-latest-pagelinks.sql:
 extract: data/enwiki-latest-pages-articles.xml data/enwiki-latest-categorylinks.sql data/enwiki-latest-page.sql data/enwiki-latest-pagelinks.sql
 	bin/python dump/extract.py data/enwiki-latest-pages-articles.xml
 
+.PHONY: quantize
+	../mwcat/bin/python -m scripts.convert --quantize yes --model_id ../mwcat/fine_tuned_distilbert --tokenizer_id distilbert-base-uncased --task text-classification
+
+
 

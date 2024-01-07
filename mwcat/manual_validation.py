@@ -9,8 +9,16 @@ from mwcat.utils import id_to_category
 
 
 def summarize_text(text_to_summarize):
+    print(text_to_summarize)
+
     tokenizer = T5Tokenizer.from_pretrained("t5-small")
-    model = T5ForConditionalGeneration.from_pretrained("./fine_tuned_t5")
+    # model = T5ForConditionalGeneration.from_pretrained("./fine_tuned_t5")
+    model = T5ForConditionalGeneration.from_pretrained(
+        # "t5-small"
+        # "tarekziade/wikipedia-summaries-t5-small"
+        # "google/t5-efficient-tiny",
+        "tarekziade/wikipedia-summaries-t5-efficient-tiny"
+    )
 
     # Prepare the input text
     input_ids = tokenizer.encode(
@@ -23,11 +31,11 @@ def summarize_text(text_to_summarize):
     # Generate the summary
     summary_ids = model.generate(
         input_ids,
-        max_length=150,
-        min_length=40,
-        length_penalty=2.0,
-        num_beams=4,
-        early_stopping=True,
+        max_length=100,
+        min_length=30,
+        # length_penalty=2.0,
+        # num_beams=4,
+        # early_stopping=True,
     )
 
     start = time.time()
