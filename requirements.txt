@@ -12,3 +12,5 @@ sentencepiece
 accelerate
 requests
 bs4
+evaluate
+rouge_score

@@ -1,6 +1,10 @@
 import torch
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
-from transformers import T5Tokenizer, T5ForConditionalGeneration
+from transformers import (
+    T5Tokenizer,
+    T5ForConditionalGeneration,
+    LongT5ForConditionalGeneration,
+)
 from datasets import load_dataset
 from tqdm import tqdm
 import time
@@ -13,11 +17,12 @@ def summarize_text(text_to_summarize):
 
     tokenizer = T5Tokenizer.from_pretrained("t5-small")
     # model = T5ForConditionalGeneration.from_pretrained("./fine_tuned_t5")
-    model = T5ForConditionalGeneration.from_pretrained(
+    model = LongT5ForConditionalGeneration.from_pretrained(
         # "t5-small"
         # "tarekziade/wikipedia-summaries-t5-small"
         # "google/t5-efficient-tiny",
-        "tarekziade/wikipedia-summaries-t5-efficient-tiny"
+        # "tarekziade/wikipedia-summaries-t5-efficient-tiny"
+        "pszemraj/long-t5-tglobal-base-16384-book-summary"
     )
 
     # Prepare the input text
