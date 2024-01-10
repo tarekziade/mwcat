@@ -1,11 +1,18 @@
+"""
+T5 and Booksum-based models distillation
+"""
 import os
+import argparse
+import json
 
 from transformers import (
-    LongT5ForConditionalGeneration,
-    T5Tokenizer,
+    AutoModelForSeq2SeqLM,
+    T5TokenizerFast,
     AutoConfig,
     DataCollatorForSeq2Seq,
     Seq2SeqTrainer,
+    LongT5ForConditionalGeneration,
+    T5ForConditionalGeneration,
     Seq2SeqTrainingArguments,
     AdamW,
 )
@@ -18,71 +25,120 @@ from torch import mps
 import evaluate
 
 
-TEXT_MAX_SIZE = 3000  # 16384
-SUMMARY_MAX_SIZE = 512  # 1024
-
-# student model config
-model_config = {
-    "d_ff": 1024,  # 2048,
-    "d_kv": 128,  # 64,
-    "d_model": 384,  # 768,
-    "num_decoder_layers": 3,  # 12
-    "num_heads": 3,  # 12
-    "num_layers": 3,  # 12
-    "decoder_start_token_id": 0,
-    "dense_act_fn": "gelu_new",
-    "dropout_rate": 0.1,
-    "early_stopping": True,
-    "encoder_attention_type": "transient-global",
-    "encoder_no_repeat_ngram_size": 4,
-    "eos_token_id": 1,
-    "feed_forward_proj": "gated-gelu",
-    "global_block_size": 16,
-    "initializer_factor": 1.0,
-    "is_encoder_decoder": True,
-    "is_gated_act": True,
-    "layer_norm_epsilon": 1e-06,
-    "length_penalty": 0.8,
-    "local_radius": 127,
-    "max_length": 512,
-    "min_length": 8,
-    "model_type": "longt5",
-    "n_positions": 4096,
-    "no_repeat_ngram_size": 3,
-    "num_beams": 2,
-    "output_past": True,
-    "pad_token_id": 0,
-    "relative_attention_max_distance": 128,
-    "relative_attention_num_buckets": 32,
-    "repetition_penalty": 3.5,
-    "tie_word_embeddings": False,
-    "torch_dtype": "float32",
-    "use_cache": True,
-    "vocab_size": 32128,
-}
-
 os.environ["PYTORCH_ENABLE_MPS_FALLBACK"] = "1"
 
 
-def create_models():
-    teacher_model_name = "pszemraj/long-t5-tglobal-base-16384-book-summary"
-    teacher_model = LongT5ForConditionalGeneration.from_pretrained(teacher_model_name)
-    tokenizer = T5Tokenizer.from_pretrained(teacher_model_name)
+def get_pytorch_device():
+    """
+    Returns the most appropriate device for PyTorch operations,
+    trying CUDA, MPS, and then CPU in that order.
+    """
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    elif torch.backends.mps.is_available():
+        return torch.device("mps")
+    else:
+        return torch.device("cpu")
+
+
+def parse_arguments():
+    parser = argparse.ArgumentParser(
+        description="Model distillation",
+        formatter_class=argparse.ArgumentDefaultsHelpFormatter,
+    )
+    parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        help="Run the script with 1%% corpus and no upload",
+        default=False,
+    )
+    parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="Evaluate using ROUGE",
+        default=False,
+    )
+    parser.add_argument(
+        "--force-download",
+        action="store_true",
+        help="Force model downloads",
+        default=False,
+    )
+    parser.add_argument(
+        "--student-model-id",
+        type=str,
+        help="Name of the student model.",
+        default="tarekziade/t5-small-booksum-distilled",
+    )
+    parser.add_argument(
+        "--teacher-model-id",
+        type=str,
+        help="Name of the teacher model for fine-tuning.",
+        default="cnicu/t5-small-booksum",
+    )
+    parser.add_argument(
+        "--input-max-size", type=int, help="Max input size for the model.", default=512
+    )
+    parser.add_argument(
+        "--summary-max-size",
+        type=int,
+        help="Max output size for the model.",
+        default=125,
+    )
+    parser.add_argument(
+        "--model-config",
+        type=str,
+        help="Path to the model configuration for the student",
+        default=os.path.join(os.path.dirname(__file__), "t5-distillation.json"),
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        help="Device used",
+        default=get_pytorch_device(),
+    )
+
+    args = parser.parse_args()
+    return args
+
+
+def create_models(args):
+    with open(args.model_config) as f:
+        model_config = json.loads(f.read())
+
+    arch = model_config["architectures"][0]
+
+    if arch == "LongT5ForConditionalGeneration":
+        klass = LongT5ForConditionalGeneration
+    else:
+        klass = T5ForConditionalGeneration
+
+    teacher_model = klass.from_pretrained(args.teacher_model_id)
+    tokenizer = T5TokenizerFast.from_pretrained(args.teacher_model_id)
     teacher_model.eval()
     torch.compile(teacher_model)
-    config = AutoConfig.from_pretrained(teacher_model_name, **model_config)
-    student_model = LongT5ForConditionalGeneration(config)
-    device = torch.device("cuda" if torch.cuda.is_available() else "mps")
-    teacher_model.to(device)
-    student_model.to(device)
+    config = AutoConfig.from_pretrained(args.teacher_model_id, **model_config)
+    student_model = klass(config)
+    teacher_model.to(args.device)
+    student_model.to(args.device)
     return teacher_model, student_model, tokenizer
 
 
 class BookSumDataset:
-    def __init__(self, dataset_id, split, tokenizer):
+    def __init__(self, args, dataset_id, train_split, eval_split, tokenizer):
+        self.args = args
         self.tokenizer = tokenizer
         self.dataset_id = dataset_id
-        data = load_dataset(dataset_id, split=split)
+        if args.force_download:
+            self.mode = "force_redownload"
+        else:
+            self.mode = "reuse_dataset_if_exists"
+
+        self.train = self._load_data(train_split)
+        self.eval = self._load_data(eval_split)
+
+    def _load_data(self, split):
+        data = load_dataset(self.dataset_id, split=split, download_mode=self.mode)
 
         def check_line(line):
             if line["summary_length"] > 1024:
@@ -92,22 +148,23 @@ class BookSumDataset:
             return line["chapter"] is not None
 
         data = data.filter(check_line)
-        assert len(data) > 100, f"Not enough data, got {len(data)}"
+        if not self.args.dry_run:
+            assert len(data) > 100, f"Not enough data, got {len(data)}"
         data = data.select_columns(["summary_length", "summary_text", "chapter"])
-        self.data = data.map(self.tokenize_function, batched=True)
+        return data.map(self.tokenize_function, batched=True)
 
     def tokenize_function(self, example):
         inputs = self.tokenizer(
             example["chapter"],
             padding="max_length",
             truncation=True,
-            max_length=TEXT_MAX_SIZE,
+            max_length=self.args.input_max_size,
         )
         targets = self.tokenizer(
             example["summary_text"],
             padding="max_length",
             truncation=True,
-            max_length=SUMMARY_MAX_SIZE,
+            max_length=self.args.summary_max_size,
         )
         inputs["labels"] = targets["input_ids"]
         return inputs
@@ -127,17 +184,17 @@ class DistillationTrainer(Seq2SeqTrainer):
         self._move_model_to_device(self.teacher, self.model.device)
 
     def compute_loss(self, student, inputs, return_outputs=False):
-        # compute student output
+        """
+        Runs the input against the student and the teacher and compare results.
+        Returns the student's loss to refine its weights.
+        """
         outputs_student = student(**inputs)
         student_loss = outputs_student.loss
-        # compute teacher output
         with torch.no_grad():
             outputs_teacher = self.teacher(**inputs)
 
-        # assert size
         assert outputs_student.logits.size() == outputs_teacher.logits.size()
 
-        # Soften probabilities and compute distillation loss
         loss_function = nn.KLDivLoss(reduction="batchmean")
         loss_logits = loss_function(
             F.log_softmax(outputs_student.logits / self.args.temperature, dim=-1),
@@ -148,84 +205,105 @@ class DistillationTrainer(Seq2SeqTrainer):
         return (loss, outputs_student) if return_outputs else loss
 
 
-rouge = evaluate.load("rouge")
+class Metrics:
+    """
+    Evaluates the model using ROUGE.
+    """
+
+    def __init__(self, tokenizer, name="rouge"):
+        self.evaluator = evaluate.load(name)
+        self.tokenizer = tokenizer
+
+    def compute_metrics(self, eval_pred):
+        predictions, labels = eval_pred
+        # predictions is 2x134 and labels 134... why?
+        # looks like second is crap
+        predictions = predictions[0]
+        predictions = tokenizer.batch_decode(
+            np.argmax(predictions, axis=-1),
+            skip_special_tokens=True,
+            clean_up_tokenization_spaces=True,
+        )
+        labels = tokenizer.batch_decode(
+            labels, skip_special_tokens=True, clean_up_tokenization_spaces=True
+        )
+        results = self.evaluator.compute(predictions=predictions, references=labels)
+        return results
 
 
-def compute_metrics(tokenizer, eval_pred):
-    predictions, labels = eval_pred
-    # predictions is 2x134 and labels 134... why?
-    # looks like second is crap
-    predictions = predictions[0]
-
-    predictions = tokenizer.batch_decode(
-        np.argmax(predictions, axis=-1),
-        skip_special_tokens=True,
-        clean_up_tokenization_spaces=True,
-    )
-
-    labels = tokenizer.batch_decode(
-        labels, skip_special_tokens=True, clean_up_tokenization_spaces=True
-    )
-
-    results = rouge.compute(predictions=predictions, references=labels)
-    return results
+def params_count(model):
+    num_params = sum(p.numel() for p in model.parameters())
+    return num_params / 1000000
 
 
 def main():
+    args = parse_arguments()
+
     print("Loading models")
-    percent = "100"
-    teacher_model, student_model, tokenizer = create_models()
 
-    training_args = DistillationTrainingArguments(
-        output_dir="./distillation_output",  # Output directory for model checkpoints and logs
-        overwrite_output_dir=True,  # Overwrite the output directory if it exists
-        num_train_epochs=2,
-        learning_rate=0.0005,
-        seed=42,
-        per_device_train_batch_size=1,
-        per_device_eval_batch_size=1,
-        gradient_accumulation_steps=128,
-        # total_train_batch_size=128,
-        lr_scheduler_type="cosine",
-        warmup_ratio=0.01,
-        # logging & evaluation strategies
-        # logging_strategy="epoch",  # to get more information to TB
-        # evaluation_strategy="steps",
-        # eval_steps=30,
-        save_strategy="epoch",
-        save_total_limit=2,
-        # load_best_model_at_end=True,
-        # push to hub parameters
-        push_to_hub=False,
-        # distilation parameters
-        alpha=0.5,
-        temperature=4.0,
-        # predict_with_generate=True,  # super slow!!
+    if args.dry_run:
+        percent = "1"
+    else:
+        percent = "100"
+
+    teacher_model, student_model, tokenizer = create_models(args)
+    distilled_model_name = args.teacher_model_id + "-distilled"
+    local_name = f"./{distilled_model_name.replace('/', '-')}"
+
+    training_args = {
+        "output_dir": f"{local_name}-output",  # Output directory for model checkpoints and logs
+        "overwrite_output_dir": True,  # Overwrite the output directory if it exists
+        "num_train_epochs": 2,
+        "learning_rate": 0.0005,
+        "seed": 42,
+        "per_device_train_batch_size": 1,
+        "per_device_eval_batch_size": 1,
+        "gradient_accumulation_steps": 128,
+        "lr_scheduler_type": "cosine",
+        "warmup_ratio": 0.01,
+        "save_strategy": "epoch",
+        "save_total_limit": 2,
+        "push_to_hub": False,
+        "alpha": 0.5,
+        "temperature": 4.0,
+    }
+
+    if args.evaluate:
+        metrics = Metrics(tokenizer)
+        training_args["evaluation_strategy"] = "steps"
+        training_args["eval_steps"] = 30
+
+    training_args = DistillationTrainingArguments(**training_args)
+
+    print(f"Teacher model has {(params_count(teacher_model)):.2f}M parameters")
+    print(f"Student model has {(params_count(student_model)):.2f}M parameters")
+
+    dataset = BookSumDataset(
+        args,
+        "kmfoda/booksum",
+        f"train[:{percent}%]",
+        f"validation[:{percent}%]",
+        tokenizer,
     )
 
-    def get_parameter_count(model):
-        num_params = sum(p.numel() for p in model.parameters())
-        return num_params
+    trainer_args = {
+        "teacher_mode": teacher_model,
+        "train_datase": dataset.train,
+        "eval_datase": dataset.eval,
+        "data_collator": DataCollatorForSeq2Seq(tokenizer),
+        "tokenizer": tokenizer
+        # optimizer=AdamW(student_model.parameters(), betas=(0.9, 0.999), eps=1e-08),
+    }
 
-    print(
-        f"teacher model has {(get_parameter_count(teacher_model)/1000000):.2f}M parameters"
-    )
-    print(
-        f"student model has {(get_parameter_count(student_model)/1000000):.2f}M parameters"
-    )
-    train_dataset = BookSumDataset(
-        "kmfoda/booksum", f"train[:{percent}%]", tokenizer
-    ).data
-    eval_dataset = BookSumDataset(
-        "kmfoda/booksum", f"validation[:{percent}%]", tokenizer
-    ).data
+    if args.evaluate:
+        trainer_args["compute_metrics"] = metrics  # M1 Killer !! :)
 
     trainer = DistillationTrainer(
         student_model,
         training_args,
         teacher_model=teacher_model,
-        train_dataset=train_dataset,
-        eval_dataset=eval_dataset,
+        train_dataset=dataset.train,
+        eval_dataset=dataset.eval,
         data_collator=DataCollatorForSeq2Seq(tokenizer),
         tokenizer=tokenizer,
         # optimizer=AdamW(student_model.parameters(), betas=(0.9, 0.999), eps=1e-08),
@@ -233,13 +311,16 @@ def main():
     )
 
     mps.empty_cache()
+
     trainer.train()
 
-    distilled_model_name = "distilled-long-t5-tglobal-base-16384-book-summary"
-    student_model.save_pretrained(f"./{distilled_model_name}")
-    tokenizer.save_pretrained(f"./{distilled_model_name}")
-    # student_model.push_to_hub(f"tarekziade/{distilled_model_name}")
-    # tokenizer.push_to_hub(f"tarekziade/{distilled_model_name}")
+    student_model.save_pretrained(local_name)
+    tokenizer.save_pretrained(local_name)
+
+    if not args.dry_run:
+        # student_model.push_to_hub(f"tarekziade/{distilled_model_name}")
+        # tokenizer.push_to_hub(f"tarekziade/{distilled_model_name}")
+        pass
 
     print(f"Distillation complete. Distilled model saved as '{distilled_model_name}'")
 
