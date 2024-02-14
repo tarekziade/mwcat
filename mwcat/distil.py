@@ -47,6 +47,13 @@ def parse_arguments():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     parser.add_argument(
+        "--percent",
+        type=int,
+        help="Percent of data used.",
+        default=100,
+    )
+
+    parser.add_argument(
         "--dry-run",
         action="store_true",
         help="Run the script with 1%% corpus and no upload",
@@ -77,13 +84,16 @@ def parse_arguments():
         default="cnicu/t5-small-booksum",
     )
     parser.add_argument(
-        "--input-max-size", type=int, help="Max input size for the model.", default=512
+        "--input-max-size",
+        type=int,
+        help="Max input size for the model.",
+        default=16384,
     )
     parser.add_argument(
         "--summary-max-size",
         type=int,
         help="Max output size for the model.",
-        default=125,
+        default=1024,
     )
     parser.add_argument(
         "--model-config",
@@ -102,6 +112,41 @@ def parse_arguments():
     return args
 
 
+TEST_DATA = """\
+The tower is 324 metres (1,063 ft) tall, about the same height as an 81-storey building, and the tallest structure in Paris. Its base is square, measuring 125 metres (410 ft) on each side. During its construction, the Eiffel Tower surpassed the Washington Monument to become the tallest man-made structure in the world, a title it held for 41 years until the Chrysler Building in New York City was finished in 1930. It was the first structure to reach a height of 300 metres. Due to the addition of a broadcasting aerial at the top of the tower in 1957, it is now taller than the Chrysler Building by 5.2 metres (17 ft). Excluding transmitters, the Eiffel Tower is the second tallest free-standing structure in France after the Millau Viaduct.
+"""
+
+
+def test_model(model, tokenizer):
+    input_ids = tokenizer.encode(
+        "summarize: " + TEST_DATA,
+        return_tensors="pt",
+        padding="max_length",
+        truncation=True,
+        max_length=512,
+        add_special_tokens=False,
+    )
+
+    input_ids = input_ids.to(model.device)
+
+    generated_ids = model.generate(input_ids, max_length=120)[0]
+    print(generated_ids)
+    return tokenizer.decode(
+        generated_ids,
+        skip_special_tokens=True,
+        remove_invalid_values=True,
+    )
+
+
+def check(student_model, teacher_model, tokenizer):
+    student_model.eval()
+    print("Student: " + test_model(student_model, tokenizer))
+    student_model.train()
+    print()
+    print("Teacher: " + test_model(teacher_model, tokenizer))
+    print()
+
+
 def create_models(args):
     with open(args.model_config) as f:
         model_config = json.loads(f.read())
@@ -117,8 +162,21 @@ def create_models(args):
     tokenizer = T5TokenizerFast.from_pretrained(args.teacher_model_id)
     teacher_model.eval()
     torch.compile(teacher_model)
-    config = AutoConfig.from_pretrained(args.teacher_model_id, **model_config)
+
+    config = AutoConfig.from_pretrained(args.teacher_model_id)  # , **model_config)
+    # config.num_layers = 3
+    # config.vocab_size = 16064
+    # config.num_heads = 4
+    # config.d_model = 256
+    # config.d_ff = 1024
+    # config.num_decoder_layers = 6
+
     student_model = klass(config)
+    # student_model = klass.from_pretrained(
+    #    args.teacher_model_id, config=config, ignore_mismatched_sizes=True
+    # )
+    # student_model = klass.from_pretrained(args.teacher_model_id)
+
     teacher_model.to(args.device)
     student_model.to(args.device)
     return teacher_model, student_model, tokenizer
@@ -148,26 +206,28 @@ class BookSumDataset:
             return line["chapter"] is not None
 
         data = data.filter(check_line)
-        if not self.args.dry_run:
-            assert len(data) > 100, f"Not enough data, got {len(data)}"
-        data = data.select_columns(["summary_length", "summary_text", "chapter"])
-        return data.map(self.tokenize_function, batched=True)
+        # if not self.args.dry_run:
+        #    assert len(data) > 100, f"Not enough data, got {len(data)}"
 
-    def tokenize_function(self, example):
-        inputs = self.tokenizer(
-            example["chapter"],
-            padding="max_length",
-            truncation=True,
-            max_length=self.args.input_max_size,
-        )
-        targets = self.tokenizer(
-            example["summary_text"],
-            padding="max_length",
-            truncation=True,
-            max_length=self.args.summary_max_size,
-        )
-        inputs["labels"] = targets["input_ids"]
-        return inputs
+        data = data.select_columns(["summary_length", "summary_text", "chapter"])
+
+        def tokenize_function(example):
+            inputs = self.tokenizer(
+                ["summarize: " + item for item in example["chapter"]],
+                padding="max_length",
+                truncation=True,
+                max_length=self.args.input_max_size,
+            )
+            targets = self.tokenizer(
+                example["summary_text"],
+                padding="max_length",
+                truncation=True,
+                max_length=self.args.summary_max_size,
+            )
+            inputs["labels"] = targets["input_ids"]
+            return inputs
+
+        return data.map(tokenize_function, batched=True)
 
 
 class DistillationTrainingArguments(Seq2SeqTrainingArguments):
@@ -181,26 +241,28 @@ class DistillationTrainer(Seq2SeqTrainer):
     def __init__(self, *args, teacher_model=None, **kwargs):
         super().__init__(*args, **kwargs)
         self.teacher = teacher_model
-        self._move_model_to_device(self.teacher, self.model.device)
+        # self._move_model_to_device(self.teacher, self.model.device)
+        self.loss_function = nn.KLDivLoss(reduction="batchmean")
 
     def compute_loss(self, student, inputs, return_outputs=False):
         """
         Runs the input against the student and the teacher and compare results.
         Returns the student's loss to refine its weights.
         """
+
         outputs_student = student(**inputs)
+
         student_loss = outputs_student.loss
         with torch.no_grad():
             outputs_teacher = self.teacher(**inputs)
 
         assert outputs_student.logits.size() == outputs_teacher.logits.size()
 
-        loss_function = nn.KLDivLoss(reduction="batchmean")
-        loss_logits = loss_function(
+        loss_logits = self.loss_function(
             F.log_softmax(outputs_student.logits / self.args.temperature, dim=-1),
             F.softmax(outputs_teacher.logits / self.args.temperature, dim=-1),
         ) * (self.args.temperature**2)
-        # Return weighted student loss
+
         loss = self.args.alpha * student_loss + (1.0 - self.args.alpha) * loss_logits
         return (loss, outputs_student) if return_outputs else loss
 
@@ -242,9 +304,9 @@ def main():
     print("Loading models")
 
     if args.dry_run:
-        percent = "1"
+        percent = 1
     else:
-        percent = "100"
+        percent = args.percent
 
     teacher_model, student_model, tokenizer = create_models(args)
     distilled_model_name = args.teacher_model_id + "-distilled"
@@ -253,14 +315,14 @@ def main():
     training_args = {
         "output_dir": f"{local_name}-output",  # Output directory for model checkpoints and logs
         "overwrite_output_dir": True,  # Overwrite the output directory if it exists
-        "num_train_epochs": 2,
+        "num_train_epochs": 3,
         "learning_rate": 0.0005,
         "seed": 42,
-        "per_device_train_batch_size": 1,
-        "per_device_eval_batch_size": 1,
-        "gradient_accumulation_steps": 128,
+        "per_device_train_batch_size": 5,
+        "per_device_eval_batch_size": 5,
+        "gradient_accumulation_steps": 50,
         "lr_scheduler_type": "cosine",
-        "warmup_ratio": 0.01,
+        "warmup_ratio": 0.05,
         "save_strategy": "epoch",
         "save_total_limit": 2,
         "push_to_hub": False,
@@ -316,6 +378,8 @@ def main():
 
     student_model.save_pretrained(local_name)
     tokenizer.save_pretrained(local_name)
+
+    check(student_model, teacher_model, tokenizer)
 
     if not args.dry_run:
         # student_model.push_to_hub(f"tarekziade/{distilled_model_name}")

@@ -1,6 +1,6 @@
 import torch
 from transformers import DistilBertTokenizer, DistilBertForSequenceClassification
-from transformers import AutoTokenizer, AutoModelForSeq2SeqLM
+from transformers import T5TokenizerFast, AutoTokenizer, AutoModelForSeq2SeqLM
 from datasets import load_dataset
 from tqdm import tqdm
 import time
@@ -16,11 +16,15 @@ def summarize_text(text_to_summarize):
     # model_name = "tarekziade/wikipedia-summaries-t5-small"
     # "google/t5-efficient-tiny",
     # "tarekziade/wikipedia-summaries-t5-efficient-tiny"
-    model_name = "pszemraj/long-t5-tglobal-base-16384-book-summary"
+    # model_name = "pszemraj/long-t5-tglobal-base-16384-book-summary"
+    # model_name = "./distilled-long-t5-tglobal-base-16384-book-summary"
+    # model_name = "./cnicu-t5-small-booksum-distilled"
     # model_name = "./distilled_t5_model"
-    tokenizer_name = "pszemraj/long-t5-tglobal-base-16384-book-summary"
+    # tokenizer_name = "pszemraj/long-t5-tglobal-base-16384-book-summary"
+    model_name = ""
+    tokenizer_name = model_name
 
-    tokenizer = AutoTokenizer.from_pretrained(tokenizer_name)
+    tokenizer = T5TokenizerFast.from_pretrained(tokenizer_name)
     model = AutoModelForSeq2SeqLM.from_pretrained(model_name)
     model.eval()
     # model.to("mps")
@@ -28,25 +32,29 @@ def summarize_text(text_to_summarize):
 
     # Prepare the input text
     input_ids = tokenizer.encode(
-        "summary:" + text_to_summarize,
+        "summary: " + text_to_summarize,
         return_tensors="pt",
         padding="max_length",
         truncation=True,
-        max_length=len(text_to_summarize),
+        max_length=512,  # len(text_to_summarize),
         add_special_tokens=False,
     )
 
     start = time.time()
-    summary_ids = model.generate(
-        input_ids, output_scores=True, return_dict_in_generate=True, max_length=120
-    )
+    # summary_ids = model.generate(
+    #    input_ids, output_scores=True, return_dict_in_generate=True, max_length=120
+    # )
 
-    summary = tokenizer.batch_decode(
-        summary_ids.sequences,
+    # summary = tokenizer.batch_decode(
+    #    summary_ids.sequences,
+    #    skip_special_tokens=True,
+    #    remove_invalid_values=True,
+    # )
+    summary = tokenizer.decode(
+        model.generate(input_ids, max_length=120)[0],
         skip_special_tokens=True,
         remove_invalid_values=True,
     )
-
     print(f"Took {time.time() - start:.2f} seconds")
     return summary
 
